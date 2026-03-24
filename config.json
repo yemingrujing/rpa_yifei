@@ -1,0 +1,23 @@
+{
+    "app_name": "RPA Studio",
+    "version": "1.0.0",
+    "window": {
+        "width": 1280,
+        "height": 800,
+        "theme": "light"
+    },
+    "automation": {
+        "default_timeout": 30,
+        "screenshot_quality": 80,
+        "image_match_threshold": 0.8,
+        "click_interval": 0.1
+    },
+    "recording": {
+        "capture_screenshots": true,
+        "record_delay": 0.5
+    },
+    "scheduler": {
+        "max_concurrent_tasks": 5,
+        "log_retention_days": 30
+    }
+}

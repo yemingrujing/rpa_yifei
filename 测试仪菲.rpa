@@ -1,0 +1,107 @@
+{
+  "nodes": [
+    {
+      "id": "node_1",
+      "component_id": "web_open",
+      "x": 49,
+      "y": 33,
+      "properties": {
+        "url": "http://47.100.248.97:28080/#/login",
+        "locator_type": "xpath",
+        "locator_value": "//input[@name='username']",
+        "tag": "input",
+        "xpath": "//input[@name='username']",
+        "css": "input[name=\"username\"]"
+      }
+    },
+    {
+      "id": "node_2",
+      "component_id": "web_input",
+      "x": 48,
+      "y": 146,
+      "properties": {
+        "locator_type": "xpath",
+        "locator_value": "//input[@name='username']",
+        "tag": "input",
+        "xpath": "//input[@name='username']",
+        "css": "input[name=\"username\"]",
+        "text": "guangwei"
+      }
+    },
+    {
+      "id": "node_3",
+      "component_id": "web_input",
+      "x": 49,
+      "y": 267,
+      "properties": {
+        "locator_type": "xpath",
+        "locator_value": "//input[@name='password']",
+        "tag": "input",
+        "xpath": "//input[@name='password']",
+        "css": "input[name=\"password\"]",
+        "text": "95E43WkW"
+      }
+    },
+    {
+      "id": "node_4",
+      "component_id": "web_click",
+      "x": 58,
+      "y": 377,
+      "properties": {
+        "locator_type": "xpath",
+        "locator_value": "//div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/section[1]/form[1]/button[1]",
+        "tag": "button",
+        "xpath": "//div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/section[1]/form[1]/button[1]",
+        "css": "div#pane-userName > div:nth-of-type(1) > section:nth-of-type(1) > form:nth-of-type(1) > button:nth-of-type(1) > span:nth-of-type(1)"
+      }
+    },
+    {
+      "id": "node_5",
+      "component_id": "web_click",
+      "x": 243,
+      "y": 45,
+      "properties": {
+        "locator_type": "xpath",
+        "locator_value": "//div[1]/div[2]/div[1]/div[2]/div[1]/div[1]/ul[1]/div[7]/span[1]/span[1]/li[1]",
+        "tag": "li",
+        "xpath": "//div[1]/div[2]/div[1]/div[2]/div[1]/div[1]/ul[1]/div[7]/span[1]/span[1]/li[1]",
+        "css": "div#app > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > ul:nth-of-type(1) > div:nth-of-type(7) > span:nth-of-type(1) > span:nth-of-type(1) > li:nth-of-type(1) > span:nth-of-type(1)"
+      }
+    },
+    {
+      "id": "node_6",
+      "component_id": "web_click",
+      "x": 247,
+      "y": 160,
+      "properties": {
+        "locator_type": "xpath",
+        "locator_value": "//div[3]/div[1]/div[3]/div[2]/div[1]/p[1]",
+        "tag": "p",
+        "xpath": "//div[3]/div[1]/div[3]/div[2]/div[1]/p[1]",
+        "css": "div#el-popover-914 > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(1) > p:nth-of-type(1)"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "node_1",
+      "to": "node_2"
+    },
+    {
+      "from": "node_2",
+      "to": "node_3"
+    },
+    {
+      "from": "node_3",
+      "to": "node_4"
+    },
+    {
+      "from": "node_4",
+      "to": "node_5"
+    },
+    {
+      "from": "node_5",
+      "to": "node_6"
+    }
+  ]
+}
