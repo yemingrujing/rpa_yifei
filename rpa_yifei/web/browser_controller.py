@@ -154,7 +154,13 @@ class BrowserController:
         except Exception as e:
             import warnings
             warnings.warn(f"Failed to get ChromeDriver: {e}")
-            raise
+            
+            if cls._cached_driver_path and os.path.exists(cls._cached_driver_path):
+                warnings.warn("Using cached ChromeDriver path")
+                cls._cache_checked = True
+                return cls._cached_driver_path
+            
+            return None
     
     def start(self, headless: bool = False, user_data_dir: Optional[str] = None):
         if self.is_running:
@@ -195,7 +201,17 @@ class BrowserController:
                 options.add_experimental_option('excludeSwitches', ['enable-automation', 'enable-logging'])
                 options.add_experimental_option('useAutomationExtension', False)
                 
-                service = Service(self._get_driver_path())
+                driver_path = self._get_driver_path()
+                if not driver_path:
+                    raise Exception(
+                        "无法获取ChromeDriver：\n"
+                        "1. 请确保网络连接正常\n"
+                        "2. 或者手动下载ChromeDriver并放到PATH中\n"
+                        "3. 下载地址：https://chromedriver.chromium.org/downloads\n"
+                        "   （注意选择与Chrome版本匹配的版本）"
+                    )
+                
+                service = Service(driver_path)
                 self.driver = webdriver.Chrome(service=service, options=options)
                 self.driver.set_page_load_timeout(60)
                 self.driver.implicitly_wait(10)
@@ -334,44 +350,351 @@ class BrowserController:
         return self.driver.find_element(by, locator)
     
     def _generate_xpath(self, element) -> str:
-        return self.driver.execute_script(
-            "function getXPath(element) {"
-            "    if (element.id) return \"//*[@id='\" + element.id + \"']\";"
-            "    if (element === document.body) return '/html' + getTagName(element);"
-            "    var ix = 0;"
-            "    var siblings = element.parentNode.childNodes;"
-            "    for (var i = 0; i < siblings.length; i++) {"
-            "        var sibling = siblings[i];"
-            "        if (sibling === element) {"
-            "            return getXPath(element.parentNode) + '/' + getTagName(element) + '[' + (ix + 1) + ']';"
-            "        }"
-            "        if (sibling.nodeType === 1 && sibling.tagName === element.tagName) {"
-            "            ix++;"
-            "        }"
-            "    }"
-            "}"
-            "function getTagName(element) {"
-            "    return element.tagName.toLowerCase();"
-            "}"
-            "return getXPath(arguments[0]);",
-            element
-        )
+        return self.driver.execute_script("""
+            function getUniqueXPath(element) {
+                if (!element || !element.tagName) return '';
+                
+                // 1. 优先使用ID（最精确）
+                if (element.id) {
+                    return "//*[@id='" + element.id + "']";
+                }
+                
+                // 2. 使用name属性
+                var name = element.getAttribute('name');
+                if (name) {
+                    var tag = element.tagName.toLowerCase();
+                    var nameCount = document.querySelectorAll(tag + '[name="' + name + '"]').length;
+                    if (nameCount === 1) {
+                        return "//" + tag + "[@name='" + name + "']";
+                    }
+                }
+                
+                // 3. 使用data-*属性
+                var dataId = element.getAttribute('data-id');
+                if (dataId) {
+                    return "//*[@data-id='" + dataId + "']";
+                }
+                
+                var dataTestId = element.getAttribute('data-testid');
+                if (dataTestId) {
+                    return "//*[@data-testid='" + dataTestId + "']";
+                }
+                
+                var dataCy = element.getAttribute('data-cy');
+                if (dataCy) {
+                    return "//*[@data-cy='" + dataCy + "']";
+                }
+                
+                // 4. 构建带父元素信息的路径
+                var pathParts = [];
+                var current = element;
+                var maxDepth = 10;
+                var depth = 0;
+                
+                while (current && current !== document.body && depth < maxDepth) {
+                    var part = getElementXPathPart(current, depth);
+                    if (part) {
+                        pathParts.unshift(part);
+                    }
+                    current = current.parentNode;
+                    depth++;
+                }
+                
+                var xpath = '/html' + pathParts.join('');
+                
+                // 5. 验证XPath是否唯一，如果不唯一，尝试添加更多限定
+                var matches = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                
+                if (matches.snapshotLength === 1) {
+                    return xpath;
+                }
+                
+                // 6. 如果不唯一，尝试使用class或其他属性
+                var altXPath = getAlternativeXPath(element);
+                if (altXPath) {
+                    matches = document.evaluate(altXPath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    if (matches.snapshotLength === 1) {
+                        return altXPath;
+                    }
+                }
+                
+                return xpath;
+            }
+            
+            function getElementXPathPart(element, depth) {
+                if (!element || !element.tagName || element.tagName === 'HTML') {
+                    return '';
+                }
+                
+                var tag = element.tagName.toLowerCase();
+                
+                // 跳过没有实际意义的包装元素
+                var skipTags = ['tbody', 'thead', 'tfoot', 'colgroup'];
+                if (skipTags.indexOf(tag) !== -1) {
+                    return '';
+                }
+                
+                var ix = 0;
+                var siblings = element.parentNode ? element.parentNode.children : [];
+                
+                for (var i = 0; i < siblings.length; i++) {
+                    if (siblings[i] === element) break;
+                    if (siblings[i].tagName === element.tagName) ix++;
+                }
+                
+                // 如果是唯一的子元素，不需要索引
+                var sameTagSiblings = Array.from(siblings).filter(function(s) {
+                    return s.tagName === element.tagName;
+                });
+                
+                if (sameTagSiblings.length === 1) {
+                    return '/' + tag;
+                }
+                
+                return '/' + tag + '[' + (ix + 1) + ']';
+            }
+            
+            function getAlternativeXPath(element) {
+                var tag = element.tagName.toLowerCase();
+                var className = element.className;
+                var placeholder = element.getAttribute('placeholder');
+                var type = element.getAttribute('type');
+                var role = element.getAttribute('role');
+                var ariaLabel = element.getAttribute('aria-label');
+                var text = element.textContent.trim().substring(0, 50);
+                
+                // 优先使用：role + aria-label
+                if (role && ariaLabel) {
+                    var xpath = "//*[@role='" + role + "' and @aria-label='" + ariaLabel + "']";
+                    var matches = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    if (matches.snapshotLength === 1) {
+                        return xpath;
+                    }
+                }
+                
+                // 使用：role + text
+                if (role && text && text.length > 2) {
+                    var xpath = "//*[@role='" + role + "' and contains(text(),'" + escapeXPathText(text) + "')]";
+                    var matches = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    if (matches.snapshotLength === 1) {
+                        return xpath;
+                    }
+                }
+                
+                // 使用：input[type + placeholder]
+                if (tag === 'input' && type && placeholder) {
+                    var xpath = "//input[@type='" + type + "' and @placeholder='" + placeholder + "']";
+                    var matches = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    if (matches.snapshotLength === 1) {
+                        return xpath;
+                    }
+                }
+                
+                // 使用：带有class的部分匹配
+                if (className && typeof className === 'string') {
+                    var classes = className.split(/\\s+/).filter(function(c) {
+                        return c.length > 3 && !c.match(/^(active|hover|focus|disabled|selected)$/i);
+                    });
+                    
+                    for (var i = 0; i < classes.length; i++) {
+                        var cls = classes[i];
+                        if (cls.length > 5) {
+                            var xpath = "//*[contains(@class,'" + cls + "')]";
+                            var matches = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                            if (matches.snapshotLength === 1) {
+                                return xpath;
+                            }
+                            
+                            // 尝试标签 + class组合
+                            xpath = "//" + tag + "[contains(@class,'" + cls + "')]";
+                            matches = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                            if (matches.snapshotLength === 1) {
+                                return xpath;
+                            }
+                        }
+                    }
+                }
+                
+                // 使用：text内容定位
+                if (text && text.length > 3 && text.length < 100) {
+                    var xpath = "//*[contains(text(),'" + escapeXPathText(text) + "')]";
+                    var matches = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    if (matches.snapshotLength === 1) {
+                        return xpath;
+                    }
+                    
+                    // 使用精确文本匹配
+                    xpath = "//*[text()='" + escapeXPathText(text) + "']";
+                    matches = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    if (matches.snapshotLength === 1) {
+                        return xpath;
+                    }
+                }
+                
+                return null;
+            }
+            
+            function escapeXPathText(text) {
+                return text.replace(/'/g, \"'\").replace(/"/g, '\"');
+            }
+            
+            return getUniqueXPath(arguments[0]);
+        """, element)
     
     def _generate_css_selector(self, element) -> str:
         if element.id:
             return f"#{element.id}"
-        return self.driver.execute_script(
-            "function getCssSelector(el) {"
-            "    if (el.id) return '#' + el.id;"
-            "    if (el === document.body) return 'body';"
-            "    var parent = el.parentNode;"
-            "    var siblings = Array.from(parent.children);"
-            "    var index = siblings.indexOf(el) + 1;"
-            "    return getCssSelector(parent) + ' > ' + el.tagName.toLowerCase() + ':nth-child(' + index + ')';"
-            "}"
-            "return getCssSelector(arguments[0]);",
-            element
-        )
+        return self.driver.execute_script("""
+            function getUniqueCssSelector(el) {
+                if (!el || !el.tagName) return '';
+                
+                // 1. 优先使用ID
+                if (el.id) {
+                    return '#' + el.id;
+                }
+                
+                // 2. 使用name属性
+                var name = el.getAttribute('name');
+                if (name) {
+                    var tag = el.tagName.toLowerCase();
+                    return tag + '[name="' + name + '"]';
+                }
+                
+                // 3. 构建路径
+                var path = [];
+                var current = el;
+                var maxDepth = 10;
+                var depth = 0;
+                
+                while (current && current !== document.body && depth < maxDepth) {
+                    var tag = current.tagName ? current.tagName.toLowerCase() : '';
+                    if (!tag || tag === 'html') break;
+                    
+                    var selector = getCssSelectorPart(current);
+                    if (selector) {
+                        path.unshift(selector);
+                    }
+                    
+                    current = current.parentNode;
+                    depth++;
+                }
+                
+                var css = 'body > ' + path.join(' > ');
+                
+                // 4. 验证是否唯一
+                try {
+                    if (document.querySelectorAll(css).length === 1) {
+                        return css;
+                    }
+                } catch (e) {}
+                
+                // 5. 尝试其他属性组合
+                var altSelector = getAlternativeCssSelector(el);
+                if (altSelector) {
+                    try {
+                        if (document.querySelectorAll(altSelector).length === 1) {
+                            return altSelector;
+                        }
+                    } catch (e) {}
+                }
+                
+                return css;
+            }
+            
+            function getCssSelectorPart(el) {
+                if (!el || !el.tagName) return '';
+                
+                var tag = el.tagName.toLowerCase();
+                var classes = el.className && typeof el.className === 'string' 
+                    ? el.className.split(/\\s+/).filter(function(c) {
+                        return c.length > 2 && !c.match(/^(active|hover|focus|disabled|selected)$/i);
+                    })
+                    : [];
+                
+                if (classes.length > 0) {
+                    // 使用第一个有意义的class
+                    for (var i = 0; i < classes.length; i++) {
+                        if (classes[i].length > 4) {
+                            var clsSelector = '.' + classes[i];
+                            var siblings = el.parentNode ? el.parentNode.querySelectorAll(clsSelector) : [];
+                            if (siblings.length === 1) {
+                                return tag + clsSelector;
+                            }
+                        }
+                    }
+                }
+                
+                // 使用nth-child
+                var siblings = el.parentNode ? Array.from(el.parentNode.children) : [];
+                var index = siblings.indexOf(el) + 1;
+                
+                // 如果同标签只有一个，不需要nth-child
+                var sameTagSiblings = siblings.filter(function(s) {
+                    return s.tagName === el.tagName;
+                });
+                
+                if (sameTagSiblings.length === 1) {
+                    return tag;
+                }
+                
+                return tag + ':nth-child(' + index + ')';
+            }
+            
+            function getAlternativeCssSelector(el) {
+                var tag = el.tagName.toLowerCase();
+                var classes = el.className && typeof el.className === 'string' 
+                    ? el.className.split(/\\s+/).filter(function(c) {
+                        return c.length > 4 && !c.match(/^(active|hover|focus|disabled|selected)$/i);
+                    })
+                    : [];
+                
+                var placeholder = el.getAttribute('placeholder');
+                var type = el.getAttribute('type');
+                var role = el.getAttribute('role');
+                
+                // 尝试：tag + class组合
+                for (var i = 0; i < classes.length; i++) {
+                    var selector = tag + '.' + classes[i];
+                    try {
+                        if (document.querySelectorAll(selector).length === 1) {
+                            return selector;
+                        }
+                    } catch (e) {}
+                }
+                
+                // 尝试：tag[attribute]
+                if (placeholder) {
+                    var selector = tag + '[placeholder="' + placeholder + '"]';
+                    try {
+                        if (document.querySelectorAll(selector).length === 1) {
+                            return selector;
+                        }
+                    } catch (e) {}
+                }
+                
+                if (type) {
+                    var selector = tag + '[type="' + type + '"]';
+                    try {
+                        if (document.querySelectorAll(selector).length === 1) {
+                            return selector;
+                        }
+                    } catch (e) {}
+                }
+                
+                if (role) {
+                    var selector = '[role="' + role + '"]';
+                    try {
+                        if (document.querySelectorAll(selector).length === 1) {
+                            return selector;
+                        }
+                    } catch (e) {}
+                }
+                
+                return null;
+            }
+            
+            return getUniqueCssSelector(arguments[0]);
+        """, element)
     
     def take_screenshot(self, path: Optional[str] = None) -> bytes:
         if not self.driver:

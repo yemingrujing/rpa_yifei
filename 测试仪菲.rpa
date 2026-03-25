@@ -12,13 +12,15 @@
         "tag": "input",
         "xpath": "//input[@name='username']",
         "css": "input[name=\"username\"]"
-      }
+      },
+      "input_port_position": "top",
+      "output_port_position": "bottom"
     },
     {
       "id": "node_2",
       "component_id": "web_input",
-      "x": 48,
-      "y": 146,
+      "x": 46,
+      "y": 164,
       "properties": {
         "locator_type": "xpath",
         "locator_value": "//input[@name='username']",
@@ -26,13 +28,15 @@
         "xpath": "//input[@name='username']",
         "css": "input[name=\"username\"]",
         "text": "guangwei"
-      }
+      },
+      "input_port_position": "top",
+      "output_port_position": "bottom"
     },
     {
       "id": "node_3",
       "component_id": "web_input",
-      "x": 49,
-      "y": 267,
+      "x": 48,
+      "y": 306,
       "properties": {
         "locator_type": "xpath",
         "locator_value": "//input[@name='password']",
@@ -40,46 +44,94 @@
         "xpath": "//input[@name='password']",
         "css": "input[name=\"password\"]",
         "text": "95E43WkW"
-      }
+      },
+      "input_port_position": "top",
+      "output_port_position": "bottom"
     },
     {
       "id": "node_4",
       "component_id": "web_click",
-      "x": 58,
-      "y": 377,
+      "x": 80,
+      "y": 500,
       "properties": {
         "locator_type": "xpath",
         "locator_value": "//div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/section[1]/form[1]/button[1]",
         "tag": "button",
         "xpath": "//div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[1]/div[1]/section[1]/form[1]/button[1]",
         "css": "div#pane-userName > div:nth-of-type(1) > section:nth-of-type(1) > form:nth-of-type(1) > button:nth-of-type(1) > span:nth-of-type(1)"
-      }
+      },
+      "input_port_position": "top",
+      "output_port_position": "top"
     },
     {
       "id": "node_5",
       "component_id": "web_click",
-      "x": 243,
-      "y": 45,
+      "x": 249,
+      "y": 23,
       "properties": {
         "locator_type": "xpath",
         "locator_value": "//div[1]/div[2]/div[1]/div[2]/div[1]/div[1]/ul[1]/div[7]/span[1]/span[1]/li[1]",
         "tag": "li",
         "xpath": "//div[1]/div[2]/div[1]/div[2]/div[1]/div[1]/ul[1]/div[7]/span[1]/span[1]/li[1]",
         "css": "div#app > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > ul:nth-of-type(1) > div:nth-of-type(7) > span:nth-of-type(1) > span:nth-of-type(1) > li:nth-of-type(1) > span:nth-of-type(1)"
-      }
+      },
+      "input_port_position": "bottom",
+      "output_port_position": "bottom"
     },
     {
       "id": "node_6",
       "component_id": "web_click",
-      "x": 247,
-      "y": 160,
+      "x": 303,
+      "y": 191,
       "properties": {
         "locator_type": "xpath",
         "locator_value": "//div[3]/div[1]/div[3]/div[2]/div[1]/p[1]",
         "tag": "p",
         "xpath": "//div[3]/div[1]/div[3]/div[2]/div[1]/p[1]",
         "css": "div#el-popover-914 > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(1) > p:nth-of-type(1)"
-      }
+      },
+      "input_port_position": "top",
+      "output_port_position": "bottom"
+    },
+    {
+      "id": "node_7",
+      "component_id": "web_input",
+      "x": 290,
+      "y": 318,
+      "properties": {
+        "locator_type": "xpath",
+        "locator_value": "//textarea[@placeholder='最多可输入200行']",
+        "tag": "textarea",
+        "xpath": "//textarea[@placeholder='最多可输入200行']",
+        "css": "textarea[placeholder=\"最多可输入200行\"]",
+        "text": "QOO1202603000000026"
+      },
+      "input_port_position": "top",
+      "output_port_position": "bottom"
+    },
+    {
+      "id": "node_8",
+      "component_id": "web_click",
+      "x": 318,
+      "y": 463,
+      "properties": {
+        "locator_type": "xpath",
+        "locator_value": "//div[1]/div[2]/div[2]/section[1]/section[1]/section[1]/section[1]/div[1]/div[1]/div[2]/div[1]/div[2]/div[1]/form[1]/div[1]/div[4]/div[1]/div[1]/button[1]",
+        "tag": "button",
+        "xpath": "//div[1]/div[2]/div[2]/section[1]/section[1]/section[1]/section[1]/div[1]/div[1]/div[2]/div[1]/div[2]/div[1]/form[1]/div[1]/div[4]/div[1]/div[1]/button[1]",
+        "css": "div#query-form-com > form:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1) > div:nth-of-type(1) > button:nth-of-type(1) > span:nth-of-type(1)"
+      },
+      "input_port_position": "top",
+      "output_port_position": "bottom"
+    },
+    {
+      "id": "node_9",
+      "component_id": "web_select_option",
+      "x": 527,
+      "y": 310,
+      "properties": {},
+      "input_port_position": "top",
+      "output_port_position": "bottom"
     }
   ],
   "connections": [
@@ -102,6 +154,14 @@
     {
       "from": "node_5",
       "to": "node_6"
+    },
+    {
+      "from": "node_6",
+      "to": "node_7"
+    },
+    {
+      "from": "node_7",
+      "to": "node_8"
     }
   ]
 }

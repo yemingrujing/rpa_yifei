@@ -185,6 +185,7 @@ class ComponentLibrary:
             {'id': 'web_input', 'name': '输入文本', 'category': '浏览器', 'icon': '⌨️'},
             {'id': 'web_get_text', 'name': '获取文本', 'category': '浏览器', 'icon': '📝'},
             {'id': 'web_get_attr', 'name': '获取属性', 'category': '浏览器', 'icon': '📋'},
+            {'id': 'web_select_option', 'name': '选择下拉项', 'category': '浏览器', 'icon': '📂'},
             {'id': 'web_screenshot', 'name': '网页截图', 'category': '浏览器', 'icon': '📸'},
             {'id': 'web_close', 'name': '关闭浏览器', 'category': '浏览器', 'icon': '❌'},
         ],
@@ -275,6 +276,7 @@ class FlowNodeWidget(QFrame):
     moved = pyqtSignal(str, int, int)
     connection_requested = pyqtSignal(str)
     port_clicked = pyqtSignal(str, str)
+    port_position_changed = pyqtSignal(str, str, str)
     
     def __init__(self, node_id, title, node_type='action', parent=None):
         super().__init__(parent)
@@ -282,6 +284,8 @@ class FlowNodeWidget(QFrame):
         self.title = title
         self.node_type = node_type
         self.connected = False
+        self.input_port_position = 'top'
+        self.output_port_position = 'bottom'
         
         self.setFixedSize(150, 80)
         self.setFrameStyle(QFrame.Shape.Box)
@@ -289,6 +293,8 @@ class FlowNodeWidget(QFrame):
         
         self._setup_ui()
         self.setCursor(QCursor(Qt.CursorShape.SizeAllCursor))
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_port_menu)
     
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -323,11 +329,88 @@ class FlowNodeWidget(QFrame):
             }}
         """)
     
+    def _show_port_menu(self, pos):
+        menu = QMenu(self)
+        
+        input_menu = QMenu("输入端口位置", menu)
+        input_top_left = input_menu.addAction("⬅️⬆️ 左上")
+        input_top = input_menu.addAction("⬆️ 顶部")
+        input_top_right = input_menu.addAction("⬆️➡️ 右上")
+        input_bottom_right = input_menu.addAction("⬇️➡️ 右下")
+        input_bottom = input_menu.addAction("⬇️ 底部")
+        input_bottom_left = input_menu.addAction("⬅️⬇️ 左下")
+        
+        input_top_left.triggered.connect(lambda: self._change_port_position('input', 'top-left'))
+        input_top.triggered.connect(lambda: self._change_port_position('input', 'top'))
+        input_top_right.triggered.connect(lambda: self._change_port_position('input', 'top-right'))
+        input_bottom_right.triggered.connect(lambda: self._change_port_position('input', 'bottom-right'))
+        input_bottom.triggered.connect(lambda: self._change_port_position('input', 'bottom'))
+        input_bottom_left.triggered.connect(lambda: self._change_port_position('input', 'bottom-left'))
+        
+        output_menu = QMenu("输出端口位置", menu)
+        output_top_left = output_menu.addAction("⬅️⬆️ 左上")
+        output_top = output_menu.addAction("⬆️ 顶部")
+        output_top_right = output_menu.addAction("⬆️➡️ 右上")
+        output_bottom_right = output_menu.addAction("⬇️➡️ 右下")
+        output_bottom = output_menu.addAction("⬇️ 底部")
+        output_bottom_left = output_menu.addAction("⬅️⬇️ 左下")
+        
+        output_top_left.triggered.connect(lambda: self._change_port_position('output', 'top-left'))
+        output_top.triggered.connect(lambda: self._change_port_position('output', 'top'))
+        output_top_right.triggered.connect(lambda: self._change_port_position('output', 'top-right'))
+        output_bottom_right.triggered.connect(lambda: self._change_port_position('output', 'bottom-right'))
+        output_bottom.triggered.connect(lambda: self._change_port_position('output', 'bottom'))
+        output_bottom_left.triggered.connect(lambda: self._change_port_position('output', 'bottom-left'))
+        
+        menu.addMenu(input_menu)
+        menu.addMenu(output_menu)
+        menu.exec(QCursor.pos())
+    
+    def _change_port_position(self, port_type, position):
+        if port_type == 'input':
+            self.input_port_position = position
+            self.port_position_changed.emit(self.node_id, 'input', position)
+        else:
+            self.output_port_position = position
+            self.port_position_changed.emit(self.node_id, 'output', position)
+    
     def get_output_port_pos(self):
-        return self.x() + self.width() // 2, self.y() + self.height()
+        pos = self.output_port_position
+        if pos == 'right':
+            return self.x() + self.width() - 20, self.y() + self.height() // 2
+        elif pos == 'top-left':
+            return self.x() + 20, self.y()
+        elif pos == 'top':
+            return self.x() + self.width() // 2, self.y()
+        elif pos == 'top-right':
+            return self.x() + self.width() - 20, self.y()
+        elif pos == 'bottom-left':
+            return self.x() + 20, self.y() + self.height()
+        elif pos == 'bottom':
+            return self.x() + self.width() // 2, self.y() + self.height()
+        elif pos == 'bottom-right':
+            return self.x() + self.width() - 20, self.y() + self.height()
+        else:
+            return self.x() + self.width() // 2, self.y() + self.height()
     
     def get_input_port_pos(self):
-        return self.x() + self.width() // 2, self.y()
+        pos = self.input_port_position
+        if pos == 'right':
+            return self.x() + self.width() - 20, self.y() + self.height() // 2
+        elif pos == 'top-left':
+            return self.x() + 20, self.y()
+        elif pos == 'top':
+            return self.x() + self.width() // 2, self.y()
+        elif pos == 'top-right':
+            return self.x() + self.width() - 20, self.y()
+        elif pos == 'bottom-left':
+            return self.x() + 20, self.y() + self.height()
+        elif pos == 'bottom':
+            return self.x() + self.width() // 2, self.y() + self.height()
+        elif pos == 'bottom-right':
+            return self.x() + self.width() - 20, self.y() + self.height()
+        else:
+            return self.x() + self.width() // 2, self.y()
     
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -368,7 +451,7 @@ class FlowDesignerWidget(QWidget):
         self.control_points = {}
         
         self.setAcceptDrops(True)
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(2000, 1500)
         self.setStyleSheet("background-color: #f5f5f5; border: 1px solid #cccccc;")
         self.setMouseTracking(True)
         
@@ -400,6 +483,7 @@ class FlowDesignerWidget(QWidget):
         
         node.selected.connect(self._on_node_selected)
         node.moved.connect(self._on_node_moved)
+        node.port_position_changed.connect(self._on_port_position_changed)
         
         self.nodes[node_id] = {
             'widget': node,
@@ -448,11 +532,19 @@ class FlowDesignerWidget(QWidget):
             self.nodes[node_id]['x'] = x
             self.nodes[node_id]['y'] = y
             
-            keys_to_remove = [k for k in self.control_points.keys() 
+            keys_to_remove = [k for k in self.control_points.keys()
                             if k.startswith(f"{node_id}->") or f"->{node_id}" in k]
             for key in keys_to_remove:
                 del self.control_points[key]
-        
+
+        self.update()
+        self.canvas_modified.emit()
+
+    def _on_port_position_changed(self, node_id, port_type, position):
+        keys_to_remove = [k for k in self.control_points.keys()
+                        if k.startswith(f"{node_id}->") or f"->{node_id}" in k]
+        for key in keys_to_remove:
+            del self.control_points[key]
         self.update()
         self.canvas_modified.emit()
     
@@ -469,6 +561,8 @@ class FlowDesignerWidget(QWidget):
         self.update()
     
     def paintEvent(self, event):
+        self._adjust_canvas_size()
+        
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -497,6 +591,26 @@ class FlowDesignerWidget(QWidget):
         
         self._draw_port_indicators(painter)
         self._draw_control_points(painter)
+    
+    def _adjust_canvas_size(self):
+        if not self.nodes:
+            return
+        
+        max_x = 800
+        max_y = 600
+        padding = 200
+        
+        for node_id, node_data in self.nodes.items():
+            widget = node_data['widget']
+            rect = widget.geometry()
+            max_x = max(max_x, rect.right() + padding)
+            max_y = max(max_y, rect.bottom() + padding)
+        
+        current_size = self.size()
+        if max_x > current_size.width() or max_y > current_size.height():
+            new_width = max(max_x, current_size.width())
+            new_height = max(max_y, current_size.height())
+            self.resize(new_width, new_height)
     
     def _get_control_point(self, conn_key, start_pos, end_pos):
         if conn_key not in self.control_points:
@@ -612,15 +726,44 @@ class FlowDesignerWidget(QWidget):
                 output_x, output_y = output_pos
             else:
                 output_x, output_y = output_pos.x(), output_pos.y()
-            
+
             painter.setPen(QPen(QColor('#0078D4'), 2))
-            painter.setBrush(QBrush(QColor('#FFFFFF')))
-            painter.drawEllipse(int(input_x), int(input_y), 12, 12)
-            
+            painter.setBrush(QBrush(QColor('#0078D4')))
+            painter.drawEllipse(int(input_x) - 6, int(input_y) - 6, 12, 12)
+
             painter.setPen(QPen(QColor('#28A745'), 2))
-            painter.setBrush(QBrush(QColor('#FFFFFF')))
-            painter.drawEllipse(int(output_x), int(output_y), 12, 12)
-    
+            painter.setBrush(QBrush(QColor('#28A745')))
+            painter.drawEllipse(int(output_x) - 6, int(output_y) - 6, 12, 12)
+
+            input_pos_label = widget.input_port_position
+            output_pos_label = widget.output_port_position
+
+            if 'left' in input_pos_label:
+                input_text = "◀"
+            elif 'right' in input_pos_label:
+                input_text = "▶"
+            else:
+                input_text = "▼"
+
+            if 'left' in output_pos_label:
+                output_text = "◀"
+            elif 'right' in output_pos_label:
+                output_text = "▶"
+            else:
+                output_text = "▼"
+
+            input_font = QFont()
+            input_font.setPixelSize(8)
+            painter.setFont(input_font)
+            painter.setPen(QPen(QColor('#FFFFFF')))
+            painter.drawText(int(input_x) - 4, int(input_y) + 3, input_text)
+
+            output_font = QFont()
+            output_font.setPixelSize(8)
+            painter.setFont(output_font)
+            painter.setPen(QPen(QColor('#FFFFFF')))
+            painter.drawText(int(output_x) - 4, int(output_y) + 3, output_text)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             for conn_key, control_point in self.control_points.items():
@@ -803,12 +946,12 @@ class FlowDesignerWidget(QWidget):
                 start_pos = start_widget.get_output_port_pos()
                 end_pos = end_widget.get_input_port_pos()
                 
-                if self._is_point_near_path(event.pos(), start_pos, end_pos, 15):
+                if self._is_point_near_path(event.pos(), start_pos, end_pos, 25):
                     clicked_connection = conn
                     break
         
         for conn_key, control_point in self.control_points.items():
-            if (event.pos() - control_point).manhattanLength() < 15:
+            if (event.pos() - control_point).manhattanLength() < 25:
                 clicked_control_point = conn_key
                 break
         
@@ -816,11 +959,15 @@ class FlowDesignerWidget(QWidget):
             reset_action = menu.addAction("🔄 重置控制点")
             reset_action.triggered.connect(lambda: self._reset_control_point(clicked_control_point))
             
-            delete_action = menu.addAction("🗑️ 删除连接线")
+            delete_action = menu.addAction("🗑️ 删除此连接线")
             delete_action.triggered.connect(lambda: self._delete_connection(clicked_control_point))
         elif clicked_connection:
-            delete_action = menu.addAction("🗑️ 删除连接线")
+            delete_action = menu.addAction("🗑️ 删除此连接线")
             delete_action.triggered.connect(lambda: self._delete_connection_by_conn(clicked_connection))
+        
+        if not self.selected_node:
+            delete_all_action = menu.addAction("🗑️ 删除所有连接线")
+            delete_all_action.triggered.connect(lambda: self._delete_all_connections())
         
         if menu.actions():
             menu.exec(event.globalPos())
@@ -865,6 +1012,28 @@ class FlowDesignerWidget(QWidget):
         self.canvas_modified.emit()
         self.update()
     
+    def _delete_all_connections(self):
+        if not self.connections:
+            return
+        
+        reply = QMessageBox.question(
+            self,
+            '确认删除',
+            f'确定要删除所有 {len(self.connections)} 条连接线吗？',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.connections.clear()
+            self.control_points.clear()
+            
+            for node_id in self.nodes:
+                self.nodes[node_id]['connections'].clear()
+            
+            self.canvas_modified.emit()
+            self.update()
+    
     def get_flow_data(self):
         flow_data = {
             'nodes': [],
@@ -872,12 +1041,15 @@ class FlowDesignerWidget(QWidget):
         }
         
         for node_id, node_data in self.nodes.items():
+            widget = node_data['widget']
             flow_data['nodes'].append({
                 'id': node_id,
                 'component_id': node_data['component_id'],
                 'x': node_data['x'],
                 'y': node_data['y'],
-                'properties': node_data.get('properties', {})
+                'properties': node_data.get('properties', {}),
+                'input_port_position': widget.input_port_position,
+                'output_port_position': widget.output_port_position
             })
         
         flow_data['connections'] = self.connections.copy()
@@ -893,6 +1065,11 @@ class FlowDesignerWidget(QWidget):
             old_id = node['id']
             new_id = self.add_node(node['component_id'], node['x'], node['y'])
             self.nodes[new_id]['properties'] = node.get('properties', {})
+            
+            widget = self.nodes[new_id]['widget']
+            widget.input_port_position = node.get('input_port_position', widget.input_port_position)
+            widget.output_port_position = node.get('output_port_position', widget.output_port_position)
+            
             node_id_map[old_id] = new_id
         
         for conn in flow_data.get('connections', []):
@@ -905,6 +1082,8 @@ class FlowDesignerWidget(QWidget):
                     'to': to_id
                 })
                 self.nodes[from_id]['connections'].append(to_id)
+        
+        self.control_points.clear()
         
         self.update()
 
@@ -944,6 +1123,122 @@ class PropertiesPanel(QWidget):
         layout.addWidget(scroll)
         
         layout.addStretch()
+    
+    def _get_select_options(self):
+        browser = self.browser
+        
+        if not browser and self.main_window and hasattr(self.main_window, 'browser'):
+            browser = self.main_window.browser
+            if browser and browser.is_running:
+                try:
+                    _ = browser.driver.current_url
+                except:
+                    browser = None
+            else:
+                browser = None
+        
+        if not browser:
+            from rpa_yifei.web.browser_controller import BrowserController
+            browser = BrowserController.connect_to_existing(9222)
+            if browser:
+                if self.main_window:
+                    self.main_window.browser = browser
+        
+        if not browser:
+            QMessageBox.warning(
+                self,
+                "浏览器未启动",
+                "未检测到已打开的浏览器。\n\n请先点击'🌐 打开并测试网页'按钮启动浏览器。"
+            )
+            return
+        
+        try:
+            _ = browser.driver.current_url
+        except:
+            QMessageBox.warning(self, "警告", "浏览器连接已断开，请重新打开网页")
+            return
+        
+        self.browser = browser
+        
+        locator_type_widget = self.property_widgets.get('locator_type')
+        locator_value_widget = self.property_widgets.get('locator_value')
+        
+        if not locator_type_widget or not locator_value_widget:
+            QMessageBox.warning(self, "警告", "定位方式或定位值为空")
+            return
+        
+        locator_type = locator_type_widget.currentText()
+        locator_value = locator_value_widget.text()
+        
+        if not locator_value:
+            QMessageBox.warning(self, "警告", "请先输入下拉框的定位值")
+            return
+        
+        try:
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.common.exceptions import TimeoutException
+            
+            wait = WebDriverWait(browser.driver, 10)
+            
+            if locator_type == 'xpath':
+                element = wait.until(lambda d: d.find_element('xpath', locator_value))
+            elif locator_type == 'css':
+                element = wait.until(lambda d: d.find_element('css selector', locator_value))
+            elif locator_type == 'id':
+                element = wait.until(lambda d: d.find_element('id', locator_value))
+            elif locator_type == 'name':
+                element = wait.until(lambda d: d.find_element('name', locator_value))
+            elif locator_type == 'class':
+                element = wait.until(lambda d: d.find_element('class name', locator_value))
+            else:
+                element = browser._find_element(locator_value, locator_type)
+            
+            if not element:
+                QMessageBox.warning(self, "警告", "未找到下拉框元素")
+                return
+            
+            from selenium.webdriver.support.ui import Select
+            
+            select = Select(element)
+            
+            options = select.options
+            
+            if not options:
+                QMessageBox.information(self, "提示", "下拉框中没有选项")
+                return
+            
+            options_info = []
+            for i, option in enumerate(options):
+                text = option.text.strip()
+                value = option.get_attribute('value') or ''
+                selected = option.is_selected()
+                
+                if selected:
+                    options_info.append(f"{i}. {text} [已选择]")
+                else:
+                    options_info.append(f"{i}. {text}")
+            
+            selection_value_widget = self.property_widgets.get('selection_value')
+            if selection_value_widget:
+                selection_value_widget.setText(options[0].text.strip())
+            
+            options_text = "\n".join(options_info)
+            
+            QMessageBox.information(
+                self,
+                "下拉选项列表",
+                f"✅ 找到 {len(options)} 个选项：\n\n{options_text}\n\n"
+                f"💡 提示：\n"
+                f"  - 按文本选择：使用选项的显示文本\n"
+                f"  - 按Value选择：使用选项的value属性\n"
+                f"  - 按索引选择：使用选项的数字索引（从0开始）\n\n"
+                f"已自动将第一个选项填入'选项值'输入框"
+            )
+            
+        except TimeoutException:
+            QMessageBox.warning(self, "警告", f"未找到下拉框元素（超时10秒）")
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"获取下拉选项失败：\n{str(e)}")
     
     def _test_web_open(self):
         url_widget = self.property_widgets.get('url')
@@ -1177,7 +1472,7 @@ class PropertiesPanel(QWidget):
                 self.content_layout.addRow(prop_def['label'], widget)
                 self.property_widgets[prop_name] = widget
         
-        web_components = ['web_click', 'web_input', 'web_get_text', 'web_get_attr']
+        web_components = ['web_click', 'web_input', 'web_get_text', 'web_get_attr', 'web_select_option']
         if component_id in web_components:
             test_btn = QPushButton("🔍 测试定位")
             test_btn.setStyleSheet("""
@@ -1213,6 +1508,24 @@ class PropertiesPanel(QWidget):
             """)
             test_btn.clicked.connect(self._test_web_open)
             self.content_layout.addRow("", test_btn)
+        
+        if component_id == 'web_select_option':
+            get_options_btn = QPushButton("📋 获取下拉选项")
+            get_options_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #FF9800;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #F57C00;
+                }
+            """)
+            get_options_btn.clicked.connect(self._get_select_options)
+            self.content_layout.addRow("", get_options_btn)
     
     def _create_widget(self, prop_def, value=None):
         prop_type = prop_def.get('type', 'text')
@@ -1340,6 +1653,12 @@ class PropertiesPanel(QWidget):
                 'attribute': {'name': 'attribute', 'label': '属性名:', 'type': 'text', 'default': 'href'},
                 'output_variable': {'name': 'output_variable', 'label': '输出变量:', 'type': 'text', 'default': 'attr_value'},
             },
+            'web_select_option': {
+                'locator_type': {'name': 'locator_type', 'label': '定位方式:', 'type': 'combo', 'options': ['xpath', 'css', 'id', 'name', 'class'], 'default': 'xpath'},
+                'locator_value': {'name': 'locator_value', 'label': '定位值:', 'type': 'text', 'default': ''},
+                'selection_type': {'name': 'selection_type', 'label': '选择方式:', 'type': 'combo', 'options': ['by_value', 'by_text', 'by_index', 'custom_input'], 'default': 'by_text'},
+                'selection_value': {'name': 'selection_value', 'label': '选项值:', 'type': 'text', 'default': ''},
+            },
             'web_screenshot': {
                 'file_path': {'name': 'file_path', 'label': '保存路径:', 'type': 'text', 'default': 'screenshot.png'},
             },
@@ -1435,6 +1754,7 @@ class MainWindow(QMainWindow):
         self.is_modified = False
         self.recording = False
         self.running = False
+        self.browser = None
         
         self._init_ui()
     
@@ -1613,10 +1933,17 @@ class MainWindow(QMainWindow):
         
         center_splitter = QSplitter(Qt.Orientation.Vertical)
         
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
         self.flow_designer = FlowDesignerWidget()
         self.flow_designer.node_selected.connect(self._on_node_selected)
         self.flow_designer.canvas_modified.connect(self._on_canvas_modified)
-        center_splitter.addWidget(self.flow_designer)
+        
+        scroll_area.setWidget(self.flow_designer)
+        center_splitter.addWidget(scroll_area)
         
         self.log_widget = ExecutionLogWidget()
         center_splitter.addWidget(self.log_widget)
@@ -1900,6 +2227,10 @@ class MainWindow(QMainWindow):
         
         self.log_widget.log(f"执行 [{index + 1}/{len(order)}]: {node_id} ({component_id})", 'INFO')
         
+        web_components = ['web_open', 'web_click', 'web_input', 'web_get_text', 'web_get_attr', 'web_select_option']
+        if component_id in web_components:
+            self._wait_for_page_ready()
+        
         try:
             success = self._execute_component(component_id, properties)
             
@@ -1908,11 +2239,60 @@ class MainWindow(QMainWindow):
             else:
                 self.log_widget.log(f"⚠️ {node_id} 执行失败", 'WARNING')
             
-            QTimer.singleShot(500, lambda: self._execute_node_sequence(order, index + 1))
+            import random
+            wait_time = random.uniform(1, 2)
+            self.log_widget.log(f"⏱️ 等待 {wait_time:.1f} 秒后继续...", 'INFO')
+            QTimer.singleShot(int(wait_time * 1000), lambda: self._execute_node_sequence(order, index + 1))
             
         except Exception as e:
             self.log_widget.log(f"❌ {node_id} 执行错误: {str(e)}", 'ERROR')
             self._flow_finished()
+    
+    def _wait_for_page_ready(self):
+        browser = self.browser
+        
+        if hasattr(self, 'properties_panel') and self.properties_panel.browser:
+            browser = self.properties_panel.browser
+        
+        if not browser or not browser.is_running:
+            try:
+                from rpa_yifei.web.browser_controller import BrowserController
+                browser = BrowserController.get_shared_instance()
+            except:
+                pass
+        
+        if not browser or not browser.is_running:
+            return
+        
+        try:
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            from selenium.common.exceptions import TimeoutException
+            
+            wait = WebDriverWait(browser.driver, 10)
+            
+            try:
+                wait.until(lambda d: d.execute_script('return document.readyState') == 'complete')
+                self.log_widget.log("✅ 页面已加载完成", 'INFO')
+            except TimeoutException:
+                self.log_widget.log("⚠️ 页面加载超时，继续执行", 'WARNING')
+            
+            browser.driver.execute_script("""
+                var pending = 0;
+                var scripts = document.getElementsByTagName('script');
+                for (var i = 0; i < scripts.length; i++) {
+                    if (scripts[i].async || scripts[i].defer) pending++;
+                }
+                if (pending === 0) {
+                    var images = document.images;
+                    for (var i = 0; i < images.length; i++) {
+                        if (!images[i].complete) pending++;
+                    }
+                }
+            """)
+            
+        except Exception as e:
+            self.log_widget.log(f"⚠️ 等待页面加载时出错: {str(e)}", 'WARNING')
     
     def _execute_component(self, component_id, properties):
         if component_id == 'web_open':
@@ -1923,6 +2303,8 @@ class MainWindow(QMainWindow):
             return self._execute_web_input(properties)
         elif component_id == 'web_get_text':
             return self._execute_web_get_text(properties)
+        elif component_id == 'web_select_option':
+            return self._execute_web_select_option(properties)
         elif component_id == 'wait_seconds':
             import time
             seconds = float(properties.get('seconds', 1))
@@ -1942,14 +2324,23 @@ class MainWindow(QMainWindow):
             return True
     
     def _check_browser_available(self):
-        if not hasattr(self, 'browser') or not self.browser:
-            return False
+        browser = self.browser if hasattr(self, 'browser') else None
         
-        if not self.browser.is_running:
+        if not browser and hasattr(self, 'properties_panel') and self.properties_panel.browser:
+            browser = self.properties_panel.browser
+        
+        if not browser:
+            try:
+                from rpa_yifei.web.browser_controller import BrowserController
+                browser = BrowserController.get_shared_instance()
+            except:
+                pass
+        
+        if not browser or not browser.is_running:
             return False
         
         try:
-            _ = self.browser.driver.current_url
+            _ = browser.driver.current_url
             return True
         except:
             return False
@@ -2091,6 +2482,131 @@ class MainWindow(QMainWindow):
             return True
         except Exception as e:
             self.log_widget.log(f"❌ 获取文本失败: {str(e)}", 'ERROR')
+            return False
+
+    def _execute_web_select_option(self, properties):
+        if not self._check_browser_available():
+            self.log_widget.log("❌ 浏览器未启动或已关闭", 'ERROR')
+            return False
+        
+        locator_type = properties.get('locator_type', 'xpath')
+        locator_value = properties.get('locator_value', '')
+        selection_type = properties.get('selection_type', 'by_text')
+        selection_value = properties.get('selection_value', '')
+        
+        if not locator_value:
+            self.log_widget.log("⚠️ 定位值为空", 'WARNING')
+            return False
+        
+        if not selection_value:
+            self.log_widget.log("⚠️ 选项值为空", 'WARNING')
+            return False
+        
+        try:
+            element = self.browser._find_element(locator_value, locator_type)
+            
+            if not element:
+                self.log_widget.log("❌ 未找到下拉框元素", 'ERROR')
+                return False
+            
+            tag_name = element.tag_name.lower() if hasattr(element, 'tag_name') else ''
+            
+            if tag_name == 'select':
+                from selenium.webdriver.support.ui import Select
+                
+                select = Select(element)
+                
+                if selection_type == 'by_value':
+                    select.select_by_value(selection_value)
+                    self.log_widget.log(f"✅ 已选择选项（按value）: {selection_value}", 'SUCCESS')
+                elif selection_type == 'by_text':
+                    select.select_by_visible_text(selection_value)
+                    self.log_widget.log(f"✅ 已选择选项（按文本）: {selection_value}", 'SUCCESS')
+                elif selection_type == 'by_index':
+                    try:
+                        index = int(selection_value)
+                        select.select_by_index(index)
+                        self.log_widget.log(f"✅ 已选择选项（按索引）: {index}", 'SUCCESS')
+                    except ValueError:
+                        self.log_widget.log(f"❌ 无效的索引值: {selection_value}", 'ERROR')
+                        return False
+            else:
+                if selection_type == 'custom_input':
+                    self.browser.click_element(locator_value, locator_type)
+                    time.sleep(0.3)
+                    
+                    found = self.browser.driver.execute_script("""
+                        var options = document.querySelectorAll('.el-select-dropdown__item, .ant-select-dropdown-menu-item, ' +
+                            '[role="option"], [class*="dropdown"] [class*="option"], ' +
+                            '[class*="menu"] [class*="item"], ul[role="listbox"] li');
+                        
+                        for ( var i = 0; i < options.length; i++) {
+                            var el = options[i];
+                            var text = el.textContent.trim();
+                            var visible = el.offsetParent !== null;
+                            
+                            if (text && visible) {
+                                if (text.includes(arguments[0]) || text === arguments[0]) {
+                                    el.click();
+                                    return {success: true, text: text, index: i};
+                                }
+                            }
+                        }
+                        
+                        var num = parseInt(arguments[0]);
+                        if (!isNaN(num) && num >= 0 && num < options.length) {
+                            options[num].click();
+                            return {success: true, text: options[num].textContent.trim(), index: num};
+                        }
+                        
+                        return {success: false};
+                    """, selection_value)
+                    
+                    if found and found.get('success'):
+                        self.log_widget.log(f"✅ 已选择选项: {found['text']}", 'SUCCESS')
+                    else:
+                        self.log_widget.log(f"❌ 未找到匹配的选项: {selection_value}", 'ERROR')
+                        return False
+                else:
+                    self.browser.click_element(locator_value, locator_type)
+                    time.sleep(0.3)
+                    
+                    found = self.browser.driver.execute_script("""
+                        var options = document.querySelectorAll('.el-select-dropdown__item, .ant-select-dropdown-menu-item, ' +
+                            '[role="option"], [class*="dropdown"] [class*="option"], ' +
+                            '[class*="menu"] [class*="item"], ul[role="listbox"] li');
+                        
+                        for ( var i = 0; i < options.length; i++) {
+                            var el = options[i];
+                            var text = el.textContent.trim();
+                            var visible = el.offsetParent !== null;
+                            
+                            if (text && visible) {
+                                if (text.includes(arguments[0]) || text === arguments[0]) {
+                                    el.click();
+                                    return {success: true, text: text, index: i};
+                                }
+                            }
+                        }
+                        
+                        var num = parseInt(arguments[0]);
+                        if (!isNaN(num) && num >= 0 && num < options.length) {
+                            options[num].click();
+                            return {success: true, text: options[num].textContent.trim(), index: num};
+                        }
+                        
+                        return {success: false};
+                    """, selection_value)
+                    
+                    if found and found.get('success'):
+                        self.log_widget.log(f"✅ 已选择选项: {found['text']}", 'SUCCESS')
+                    else:
+                        self.log_widget.log(f"❌ 未找到匹配的选项: {selection_value}", 'ERROR')
+                        return False
+            
+            return True
+        except Exception as e:
+            self.log_widget.log(f"❌ 选择下拉项失败: {str(e)}", 'ERROR')
             return False
     
     def _flow_finished(self):

@@ -113,21 +113,61 @@ class ElementPickerWidget(QFrame):
         self.setMinimumSize(900, 700)
         self.setFrameStyle(QFrame.Shape.Box)
         self._setup_ui()
+        
+        QTimer.singleShot(100, self._check_existing_browser)
+    
+    def _check_existing_browser(self):
+        try:
+            from rpa_yifei.web.browser_controller import BrowserController
+            
+            self.browser = BrowserController.connect_to_existing(9222)
+            
+            if self.browser and self.browser.is_running:
+                try:
+                    current_url = self.browser.driver.current_url
+                    if current_url and current_url.startswith('http'):
+                        self.browser_status_label.setText("🟢 浏览器已连接")
+                        self.browser_status_label.setStyleSheet("color: #4CAF50; font-weight: bold; padding: 5px;")
+                        self.url_input.setText(current_url)
+                        self.status_label.setText(f"状态: 已连接到 {current_url[:50]}...")
+                        return
+                except:
+                    pass
+            
+            self.browser = None
+            self.browser_status_label.setText("🔴 未检测到浏览器")
+            self.browser_status_label.setStyleSheet("color: #f44336; font-weight: bold; padding: 5px;")
+            self.status_label.setText("状态: 未检测到浏览器，请先打开浏览器")
+            
+        except Exception as e:
+            self.browser = None
+            self.browser_status_label.setText("🔴 未检测到浏览器")
+            self.browser_status_label.setStyleSheet("color: #f44336; font-weight: bold; padding: 5px;")
+            self.status_label.setText("状态: 未检测到浏览器")
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         
         header = QHBoxLayout()
         
+        self.browser_status_label = QLabel("🔴 未检测到浏览器")
+        self.browser_status_label.setStyleSheet("color: #f44336; font-weight: bold; padding: 5px;")
+        
+        self.recheck_btn = QPushButton("🔄 重新检测")
+        self.recheck_btn.setMaximumWidth(100)
+        self.recheck_btn.clicked.connect(self._check_existing_browser)
+        
         self.url_input = QLineEdit()
-        self.url_input.setPlaceholderText("输入URL地址...")
+        self.url_input.setPlaceholderText("输入URL地址（浏览器已打开时可不填）...")
         self.url_input.returnPressed.connect(self._navigate_to_url)
         
-        self.navigate_btn = QPushButton("访问")
+        self.navigate_btn = QPushButton("访问/刷新")
         self.navigate_btn.clicked.connect(self._navigate_to_url)
         
+        header.addWidget(self.browser_status_label)
+        header.addWidget(self.recheck_btn)
         header.addWidget(QLabel("URL:"))
-        header.addWidget(self.url_input)
+        header.addWidget(self.url_input, 1)
         header.addWidget(self.navigate_btn)
         
         layout.addLayout(header)
@@ -138,24 +178,20 @@ class ElementPickerWidget(QFrame):
         self.pick_btn.setCheckable(True)
         self.pick_btn.clicked.connect(self._toggle_pick_mode)
         
-        self.refresh_btn = QPushButton("🔄 刷新")
+        self.refresh_btn = QPushButton("🔄 刷新元素")
         self.refresh_btn.clicked.connect(self._refresh_elements)
         
         self.save_btn = QPushButton("💾 保存选择")
         self.save_btn.clicked.connect(self._save_selected)
         
-        self.close_btn = QPushButton("❌ 关闭")
-        self.close_btn.clicked.connect(self.close)
-        
         control_bar.addWidget(self.pick_btn)
         control_bar.addWidget(self.refresh_btn)
         control_bar.addWidget(self.save_btn)
         control_bar.addStretch()
-        control_bar.addWidget(self.close_btn)
         
         layout.addLayout(control_bar)
         
-        self.status_label = QLabel("状态: 未连接")
+        self.status_label = QLabel("状态: 等待连接浏览器...")
         self.progress = QProgressBar()
         self.progress.setMaximumWidth(200)
         self.progress.setVisible(False)
@@ -238,6 +274,14 @@ class ElementPickerWidget(QFrame):
         self.css_input.setReadOnly(True)
         locator_layout.addRow("CSS:", self.css_input)
         
+        self.context_input = QLineEdit()
+        self.context_input.setPlaceholderText("输入关联文本，如：标签、名称等")
+        locator_layout.addRow("关联文本:", self.context_input)
+        
+        self.find_by_context_btn = QPushButton("🔍 根据关联文本定位")
+        self.find_by_context_btn.clicked.connect(self._find_element_by_context)
+        locator_layout.addRow("", self.find_by_context_btn)
+        
         self.locator_type_combo = QComboBox()
         self.locator_type_combo.addItems(['xpath', 'css', 'id', 'name', 'class', 'tag'])
         locator_layout.addRow("定位方式:", self.locator_type_combo)
@@ -251,11 +295,30 @@ class ElementPickerWidget(QFrame):
         
         right_layout.addWidget(locator_tab)
         
+        select_options_tab = QWidget()
+        select_options_layout = QVBoxLayout(select_options_tab)
+        
+        self.select_options_label = QLabel("当前元素不是下拉框")
+        self.select_options_label.setWordWrap(True)
+        self.select_options_label.setStyleSheet("color: #666; font-style: italic; padding: 10px;")
+        select_options_layout.addWidget(self.select_options_label)
+        
+        self.select_options_list = QListWidget()
+        self.select_options_list.setVisible(False)
+        select_options_layout.addWidget(self.select_options_list)
+        
+        refresh_options_btn = QPushButton("🔄 刷新选项")
+        refresh_options_btn.clicked.connect(self._refresh_select_options)
+        select_options_layout.addWidget(refresh_options_btn)
+        
+        select_options_layout.addStretch()
+        right_layout.addWidget(select_options_tab)
+        
         actions_tab = QWidget()
         actions_layout = QVBoxLayout(actions_tab)
         
         self.action_combo = QComboBox()
-        self.action_combo.addItems(['点击', '输入文本', '获取文本', '获取属性', '悬停', '截图'])
+        self.action_combo.addItems(['点击', '输入文本', '获取文本', '获取属性', '悬停', '截图', '选择下拉项', '展开下拉并选择'])
         actions_layout.addWidget(QLabel("选择操作:"))
         actions_layout.addWidget(self.action_combo)
         
@@ -276,6 +339,7 @@ class ElementPickerWidget(QFrame):
         
         tabs.addTab(info_tab, "元素信息")
         tabs.addTab(locator_tab, "定位器")
+        tabs.addTab(select_options_tab, "下拉选项")
         tabs.addTab(actions_tab, "操作测试")
         
         right_layout.addWidget(tabs)
@@ -289,7 +353,27 @@ class ElementPickerWidget(QFrame):
     
     def _navigate_to_url(self):
         url = self.url_input.text().strip()
+        
+        if self.browser and self.browser.is_running:
+            try:
+                current_url = self.browser.driver.current_url
+                if current_url and current_url.startswith('http'):
+                    self.browser_status_label.setText("🟢 浏览器已连接")
+                    self.browser_status_label.setStyleSheet("color: #4CAF50; font-weight: bold; padding: 5px;")
+                    
+                    if not url:
+                        self.status_label.setText(f"状态: 刷新元素列表...")
+                        self._refresh_elements()
+                        return
+                    elif url == current_url or url in current_url:
+                        self.status_label.setText(f"状态: 刷新元素列表...")
+                        self._refresh_elements()
+                        return
+            except:
+                pass
+        
         if not url:
+            QMessageBox.warning(self, "警告", "请输入URL地址")
             return
         
         if not url.startswith('http'):
@@ -314,7 +398,7 @@ class ElementPickerWidget(QFrame):
         self.navigate_btn.setEnabled(False)
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
-        self.status_label.setText("状态: 正在启动浏览器...")
+        self.status_label.setText("状态: 正在访问网页...")
         
         self.browser_thread = BrowserThread(self.browser, url)
         self.browser_thread.status_changed.connect(self._on_status_changed)
@@ -333,7 +417,7 @@ class ElementPickerWidget(QFrame):
             display_text = f"[{info.tag_name}]"
             if info.id:
                 display_text += f" #{info.id}"
-            if info.class_name:
+            if info.class_name and info.class_name.strip():
                 cls = info.class_name.split()[0] if info.class_name else ""
                 display_text += f" .{cls}"
             if info.text and len(info.text) < 30:
@@ -351,13 +435,32 @@ class ElementPickerWidget(QFrame):
         
         if success:
             self.status_label.setText(f"状态: {message}")
+            if self.browser and self.browser.is_running:
+                try:
+                    current_url = self.browser.driver.current_url
+                    if current_url and current_url.startswith('http'):
+                        self.browser_status_label.setText("🟢 浏览器已连接")
+                        self.browser_status_label.setStyleSheet("color: #4CAF50; font-weight: bold; padding: 5px;")
+                        self.url_input.setText(current_url)
+                except:
+                    pass
         else:
             QMessageBox.warning(self, "错误", f"操作失败: {message}")
             self.status_label.setText("状态: 操作失败")
     
     def _refresh_elements(self):
         if not self.browser or not self.browser.is_running:
-            QMessageBox.warning(self, "警告", "请先访问一个网址")
+            self.browser_status_label.setText("🔴 未检测到浏览器")
+            self.browser_status_label.setStyleSheet("color: #f44336; font-weight: bold; padding: 5px;")
+            QMessageBox.warning(self, "警告", "请先打开浏览器，或点击\"访问/刷新\"按钮访问网页")
+            return
+        
+        try:
+            _ = self.browser.driver.current_url
+        except:
+            self.browser_status_label.setText("🔴 浏览器连接已断开")
+            self.browser_status_label.setStyleSheet("color: #f44336; font-weight: bold; padding: 5px;")
+            QMessageBox.warning(self, "警告", "浏览器连接已断开，请重新启动元素拾取器")
             return
         
         self.progress.setVisible(True)
@@ -379,6 +482,205 @@ class ElementPickerWidget(QFrame):
         if info:
             self._display_element_info(info)
     
+    def _find_element_by_context(self):
+        context_text = self.context_input.text().strip()
+        if not context_text:
+            QMessageBox.warning(self, "警告", "请输入关联文本")
+            return
+        
+        if not self.browser:
+            QMessageBox.warning(self, "警告", "请先打开网页")
+            return
+        
+        try:
+            result = self.browser.driver.execute_script("""
+                var contextText = arguments[0];
+                var found = null;
+                
+                // 1. 查找包含指定文本的元素
+                var textElements = document.querySelectorAll('*');
+                for (var i = 0; i < textElements.length; i++) {
+                    var el = textElements[i];
+                    var text = el.textContent.trim();
+                    
+                    if (text === contextText || text.includes(contextText)) {
+                        // 找到文本所在元素
+                        
+                        // 2. 查找附近的下拉框
+                        // 2.1 先查找下一个兄弟元素
+                        var next = el.nextElementSibling;
+                        while (next) {
+                            if (next.tagName === 'SELECT') {
+                                found = next;
+                                break;
+                            }
+                            // 检查是否是容器类元素
+                            var selects = next.querySelectorAll('select, .el-select, [class*="select"], input[role="combobox"]');
+                            if (selects.length > 0) {
+                                found = selects[0];
+                                break;
+                            }
+                            next = next.nextElementSibling;
+                        }
+                        
+                        // 2.2 如果没找到，查找父容器的下一个下拉框
+                        if (!found && el.parentNode) {
+                            var parent = el.parentNode;
+                            var siblings = parent.children;
+                            var elIndex = Array.from(siblings).indexOf(el);
+                            
+                            for (var j = elIndex + 1; j < siblings.length; j++) {
+                                var sibling = siblings[j];
+                                if (sibling.tagName === 'SELECT') {
+                                    found = sibling;
+                                    break;
+                                }
+                                var selects = sibling.querySelectorAll('select, .el-select, [class*="select"], input[role="combobox"]');
+                                if (selects.length > 0) {
+                                    found = selects[0];
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // 2.3 查找祖先元素后面的下拉框
+                        if (!found) {
+                            var ancestors = [];
+                            var current = el.parentNode;
+                            while (current && current !== document.body) {
+                                ancestors.push(current);
+                                current = current.parentNode;
+                            }
+                            
+                            for (var a = 0; a < ancestors.length; a++) {
+                                var ancestor = ancestors[a];
+                                var siblings = ancestor.parentNode ? ancestor.parentNode.children : [];
+                                var ancIndex = Array.from(siblings).indexOf(ancestor);
+                                
+                                for (var s = ancIndex + 1; s < siblings.length; s++) {
+                                    var sib = siblings[s];
+                                    var selects = sib.querySelectorAll ? sib.querySelectorAll('select, .el-select, [class*="select"], input[role="combobox"]') : [];
+                                    if (selects.length > 0) {
+                                        found = selects[0];
+                                        break;
+                                    }
+                                }
+                                if (found) break;
+                            }
+                        }
+                        
+                        if (found) break;
+                    }
+                }
+                
+                if (found) {
+                    // 生成定位信息
+                    var result = {
+                        found: true,
+                        tagName: found.tagName,
+                        id: found.id || '',
+                        className: found.className || '',
+                        text: found.textContent ? found.textContent.trim().substring(0, 100) : '',
+                        xpath: '',
+                        cssSelector: ''
+                    };
+                    
+                    // 生成XPath
+                    if (found.id) {
+                        result.xpath = "//*[@id='" + found.id + "']";
+                        result.cssSelector = "#" + found.id;
+                    } else {
+                        var path = [];
+                        var current = found;
+                        while (current && current !== document.body) {
+                            var tag = current.tagName ? current.tagName.toLowerCase() : '';
+                            if (!tag || tag === 'html') break;
+                            
+                            var ix = 0;
+                            var siblings = current.parentNode ? current.parentNode.children : [];
+                            for (var i = 0; i < siblings.length; i++) {
+                                if (siblings[i] === current) break;
+                                if (siblings[i].tagName === current.tagName) ix++;
+                            }
+                            
+                            if (siblings.length === 1) {
+                                path.unshift(tag);
+                            } else {
+                                path.unshift(tag + '[' + (ix + 1) + ']');
+                            }
+                            current = current.parentNode;
+                        }
+                        result.xpath = '/html/' + path.join('/');
+                        
+                        // 生成CSS选择器
+                        current = found;
+                        var cssPath = [];
+                        while (current && current !== document.body) {
+                            var tag = current.tagName ? current.tagName.toLowerCase() : '';
+                            if (!tag || tag === 'html') break;
+                            
+                            if (current.id) {
+                                cssPath.unshift('#' + current.id);
+                                break;
+                            } else if (current.className && typeof current.className === 'string') {
+                                var cls = current.className.split(/\\s+/)[0];
+                                if (cls && cls.length > 2) {
+                                    cssPath.unshift(tag + '.' + cls);
+                                } else {
+                                    cssPath.unshift(tag);
+                                }
+                            } else {
+                                cssPath.unshift(tag);
+                            }
+                            current = current.parentNode;
+                        }
+                        result.cssSelector = cssPath.join(' > ');
+                    }
+                    
+                    return result;
+                }
+                
+                return {found: false};
+            """, context_text)
+            
+            if result and result.get('found'):
+                self.tag_input.setText(result.get('tagName', ''))
+                self.id_input.setText(result.get('id', ''))
+                self.class_input.setText(result.get('className', ''))
+                self.text_input.setPlainText(result.get('text', ''))
+                self.xpath_input.setText(result.get('xpath', ''))
+                self.css_input.setText(result.get('cssSelector', ''))
+                self.locator_type_combo.setCurrentText('xpath')
+                self.locator_value_input.setText(result.get('xpath', ''))
+                
+                # 更新current_element
+                self.current_element = type('obj', (object,), result)()
+                
+                QMessageBox.information(
+                    self,
+                    "定位成功",
+                    f"✅ 已找到关联元素！\n\n"
+                    f"标签: {result.get('tagName', '')}\n"
+                    f"文本: {result.get('text', '')[:50]}\n"
+                    f"XPath: {result.get('xpath', '')}\n\n"
+                    f"💡 可以直接使用此定位器"
+                )
+                
+                self.status_label.setText(f"状态: 已定位到 '{context_text}' 附近的元素")
+            else:
+                QMessageBox.warning(
+                    self,
+                    "未找到",
+                    f"⚠️ 未找到关联文本 '{context_text}' 附近的下拉框元素\n\n"
+                    f"💡 请确认：\n"
+                    f"  - 输入的关联文本是否正确\n"
+                    f"  - 该文本附近是否有下拉框/选择框"
+                )
+                self.status_label.setText("状态: 未找到关联元素")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"定位失败: {str(e)}")
+    
     def _display_element_info(self, info: ElementInfo):
         self.current_element = info
         
@@ -392,6 +694,37 @@ class ElementPickerWidget(QFrame):
         self.xpath_input.setText(info.xpath)
         self.css_input.setText(info.css_selector)
         
+        # 验证XPath唯一性
+        try:
+            if self.browser and info.xpath:
+                matches = self.browser.driver.execute_script("""
+                    try {
+                        var result = document.evaluate(arguments[0], document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                        return result.snapshotLength;
+                    } catch (e) {
+                        return -1;
+                    }
+                """, info.xpath)
+                
+                if matches == 1:
+                    self.xpath_input.setStyleSheet("background-color: #e8f5e9; border: 1px solid #4CAF50;")
+                elif matches > 1:
+                    self.xpath_input.setStyleSheet("background-color: #fff3e0; border: 1px solid #FF9800;")
+                    QMessageBox.warning(
+                        self,
+                        "XPath不唯一",
+                        f"⚠️ 此XPath定位到了 {matches} 个元素！\n\n"
+                        f"XPath: {info.xpath}\n\n"
+                        f"💡 建议：\n"
+                        f"  - 使用更精确的定位方式\n"
+                        f"  - 使用ID、name或其他唯一属性\n"
+                        f"  - 添加更多限定条件"
+                    )
+                else:
+                    self.xpath_input.setStyleSheet("")
+        except:
+            pass
+        
         locator_value = ""
         if info.id:
             locator_value = info.id
@@ -404,6 +737,96 @@ class ElementPickerWidget(QFrame):
             self.locator_type_combo.setCurrentText('css')
         
         self.locator_value_input.setText(locator_value)
+        
+        if info.tag_name and info.tag_name.lower() == 'select':
+            self._refresh_select_options()
+        else:
+            self.select_options_label.setText("当前元素不是下拉框")
+            self.select_options_label.setVisible(True)
+            self.select_options_list.setVisible(False)
+    
+    def _refresh_select_options(self):
+        if not self.current_element:
+            self.select_options_label.setText("请先选择一个元素")
+            self.select_options_label.setVisible(True)
+            self.select_options_list.setVisible(False)
+            return
+        
+        if not self.browser or not self.browser.is_running:
+            self.select_options_label.setText("浏览器未连接")
+            self.select_options_label.setStyleSheet("color: #f44336; padding: 10px;")
+            self.select_options_label.setVisible(True)
+            self.select_options_list.setVisible(False)
+            return
+        
+        try:
+            _ = self.browser.driver.current_url
+        except:
+            self.select_options_label.setText("浏览器连接已断开")
+            self.select_options_label.setStyleSheet("color: #f44336; padding: 10px;")
+            self.select_options_label.setVisible(True)
+            self.select_options_list.setVisible(False)
+            return
+        
+        try:
+            if self.current_element.tag_name.lower() != 'select':
+                self.select_options_label.setText("当前元素不是下拉框")
+                self.select_options_label.setVisible(True)
+                self.select_options_list.setVisible(False)
+                return
+            
+            elements = self.browser.driver.find_elements('xpath', self.current_element.xpath)
+            if not elements:
+                self.select_options_label.setText("未找到下拉框元素")
+                self.select_options_label.setVisible(True)
+                self.select_options_list.setVisible(False)
+                return
+            
+            element = elements[0]
+            
+            from selenium.webdriver.support.ui import Select
+            
+            select = Select(element)
+            options = select.options
+            
+            if not options:
+                self.select_options_label.setText("下拉框中没有选项")
+                self.select_options_label.setVisible(True)
+                self.select_options_list.setVisible(False)
+                return
+            
+            self.select_options_list.clear()
+            
+            for i, option in enumerate(options):
+                text = option.text.strip()
+                value = option.get_attribute('value') or ''
+                selected = option.is_selected()
+                
+                display_text = f"{i}. {text}"
+                if selected:
+                    display_text += " [已选择]"
+                if value:
+                    display_text += f" (value: {value})"
+                
+                item = QListWidgetItem(display_text)
+                item.setData(Qt.ItemDataRole.UserRole, {
+                    'index': i,
+                    'text': text,
+                    'value': value,
+                    'selected': selected
+                })
+                self.select_options_list.addItem(item)
+            
+            self.select_options_label.setText(f"✅ 找到 {len(options)} 个选项，点击列表项查看详情")
+            self.select_options_label.setStyleSheet("color: #4CAF50; font-weight: bold; padding: 10px;")
+            self.select_options_label.setVisible(True)
+            self.select_options_list.setVisible(True)
+            
+        except Exception as e:
+            self.select_options_label.setText(f"获取下拉选项失败: {str(e)}")
+            self.select_options_label.setStyleSheet("color: #f44336; padding: 10px;")
+            self.select_options_label.setVisible(True)
+            self.select_options_list.setVisible(False)
     
     def _toggle_pick_mode(self):
         if not self.browser or not self.browser.is_running:
@@ -659,6 +1082,137 @@ class ElementPickerWidget(QFrame):
             elif action == '截图':
                 screenshot = self.browser.take_screenshot()
                 QMessageBox.information(self, "截图", "截图已保存")
+            
+            elif action == '选择下拉项':
+                tag_name = self.current_element.tag_name.lower() if self.current_element.tag_name else ''
+                
+                element = self.browser._find_element(locator_value, locator_type)
+                if not element:
+                    QMessageBox.warning(self, "警告", "未找到下拉框元素")
+                    return
+                
+                if tag_name == 'select':
+                    from selenium.webdriver.support.ui import Select
+                    
+                    select = Select(element)
+                    
+                    if param.startswith('index:'):
+                        try:
+                            index = int(param.replace('index:', ''))
+                            select.select_by_index(index)
+                            self.status_label.setText(f"状态: 已选择索引 {index}")
+                            QMessageBox.information(self, "成功", f"已选择索引 {index} 的选项")
+                        except:
+                            QMessageBox.warning(self, "错误", f"无效的索引: {param.replace('index:', '')}")
+                    elif param.startswith('value:'):
+                        value = param.replace('value:', '')
+                        select.select_by_value(value)
+                        self.status_label.setText(f"状态: 已选择value={value}")
+                        QMessageBox.information(self, "成功", f"已选择value为{value}的选项")
+                    else:
+                        select.select_by_visible_text(param)
+                        self.status_label.setText(f"状态: 已选择文本: {param}")
+                        QMessageBox.information(self, "成功", f"已选择文本为'{param}'的选项")
+                    
+                    self._refresh_select_options()
+                else:
+                    try:
+                        self.browser.click_element(locator_value, locator_type)
+                        time.sleep(0.3)
+                        
+                        found = self.browser.driver.execute_script("""
+                            var options = document.querySelectorAll('.el-select-dropdown__item, .ant-select-dropdown-menu-item, ' +
+                                '[role="option"], [class*="dropdown"] [class*="option"], ' +
+                                '[class*="menu"] [class*="item"], ul[role="listbox"] li');
+                            
+                            for (var i = 0; i < options.length; i++) {
+                                var el = options[i];
+                                var text = el.textContent.trim();
+                                var visible = el.offsetParent !== null;
+                                
+                                if (text && visible) {
+                                    if (text.includes(arguments[0]) || text === arguments[0]) {
+                                        el.click();
+                                        return {success: true, text: text, index: i};
+                                    }
+                                }
+                            }
+                            
+                            var num = parseInt(arguments[0]);
+                            if (!isNaN(num) && num >= 0 && num < options.length) {
+                                options[num].click();
+                                return {success: true, text: options[num].textContent.trim(), index: num};
+                            }
+                            
+                            return {success: false};
+                        """, param)
+                        
+                        if found and found.get('success'):
+                            self.status_label.setText(f"状态: 已选择: {found['text']}")
+                            QMessageBox.information(self, "成功", f"已选择选项: {found['text']}")
+                        else:
+                            QMessageBox.warning(self, "警告", f"未找到匹配的选项: {param}")
+                            self.status_label.setText("状态: 未找到匹配选项")
+                            
+                    except Exception as e:
+                        QMessageBox.warning(self, "错误", f"选择失败: {str(e)}")
+            
+            elif action == '展开下拉并选择':
+                try:
+                    click_result = self.browser.click_element(locator_value, locator_type)
+                    time.sleep(0.5)
+                    
+                    dropdown_options = self.browser.driver.execute_script("""
+                        var options = [];
+                        var dropdown = arguments[0];
+                        
+                        // 查找下拉列表（常见选择器）
+                        var dropdowns = document.querySelectorAll('.el-select-dropdown__item, .ant-select-dropdown-menu-item, ' +
+                            '.select-dropdown__option, [role="option"], [class*="dropdown"] [class*="option"], ' +
+                            '[class*="menu"] [class*="item"], ul[role="listbox"] li, div[class*="list"] > div');
+                        
+                        for (var i = 0; i < dropdowns.length; i++) {
+                            var el = dropdowns[i];
+                            var text = el.textContent.trim();
+                            var visible = el.offsetParent !== null;
+                            
+                            if (text && visible && el.offsetWidth > 0 && el.offsetHeight > 0) {
+                                var match_text = text.substring(0, 50);
+                                options.push({
+                                    text: text,
+                                    shortText: match_text,
+                                    visible: visible,
+                                    index: i
+                                });
+                            }
+                        }
+                        
+                        return options.slice(0, 20);
+                    """, self.browser.driver.find_element('xpath', locator_value) if locator_type == 'xpath' else None)
+                    
+                    if dropdown_options and len(dropdown_options) > 0:
+                        option_texts = "\n".join([f"{i+1}. {opt['shortText']}" for i, opt in enumerate(dropdown_options)])
+                        QMessageBox.information(
+                            self, 
+                            "找到下拉选项",
+                            f"✅ 找到 {len(dropdown_options)} 个选项：\n\n{option_texts}\n\n"
+                            f"💡 在参数框中输入要选择的选项文本或编号"
+                        )
+                        self.status_label.setText(f"状态: 找到 {len(dropdown_options)} 个下拉选项")
+                    else:
+                        QMessageBox.information(
+                            self,
+                            "提示",
+                            "未找到明显的下拉选项列表。\n\n"
+                            "请尝试：\n"
+                            "1. 确认下拉框已正确展开\n"
+                            "2. 使用XPath定位具体的选项元素"
+                        )
+                        self.status_label.setText("状态: 未找到下拉选项")
+                        
+                except Exception as e:
+                    QMessageBox.warning(self, "警告", f"展开下拉框失败: {str(e)}")
+                    self.status_label.setText(f"状态: 操作失败")
                 
         except Exception as e:
             QMessageBox.warning(self, "错误", f"操作失败: {str(e)}")
@@ -684,8 +1238,6 @@ class ElementPickerWidget(QFrame):
         if self.browser_thread and self.browser_thread.isRunning():
             self.browser_thread.stop()
             self.browser_thread.wait()
-        if self.browser:
-            self.browser.close()
         self.closed.emit()
         super().closeEvent(event)
 
